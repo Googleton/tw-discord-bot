@@ -1,28 +1,15 @@
-use std::sync::Arc;
-use std::time::Duration;
-use serenity::framework::standard::{Args, CommandResult};
-use serenity::framework::standard::macros::command;
-use serenity::{
-    async_trait,
-    builder::{CreateActionRow, CreateButton, CreateSelectMenu, CreateSelectMenuOption},
-    client::{Context, EventHandler},
-    futures::StreamExt,
-    model::{
-        channel::{Message, ReactionType},
-        interactions::{
-            message_component::ButtonStyle,
-            InteractionApplicationCommandCallbackDataFlags,
-            InteractionResponseType,
-        },
-    },
-    Client,
-};
-use tokio::sync::RwLock;
-use crate::{api, TribalWarsState};
-use crate::api::models::{TribalWars, Village};
-use tracing::{info, debug};
+use crate::api::models::Village;
 use crate::api::tribalapi;
 use crate::commands::tribal::send_village_embed;
+use crate::TribalWarsState;
+use serenity::framework::standard::macros::command;
+use serenity::framework::standard::{Args, CommandResult};
+use serenity::{
+    builder::{CreateActionRow, CreateSelectMenu, CreateSelectMenuOption},
+    client::Context,
+    model::{channel::Message, interactions::InteractionResponseType},
+};
+use std::time::Duration;
 
 struct PlayerInteract;
 
@@ -30,7 +17,10 @@ impl PlayerInteract {
     fn select_option(vill: &Village) -> CreateSelectMenuOption {
         let mut opt = CreateSelectMenuOption::default();
         // This is what will be shown to the user
-        opt.label(format!("{} - {}|{} - {}p.", vill.name, vill.x, vill.y, vill.rank));
+        opt.label(format!(
+            "{} - {}|{} - {}p.",
+            vill.name, vill.x, vill.y, vill.rank
+        ));
         // This is used to identify the selected value
         opt.value(format!("{}.{}", vill.x, vill.y));
         opt
@@ -59,19 +49,20 @@ impl PlayerInteract {
     }
 }
 
-
 #[command]
 #[aliases("v")]
-async fn villages(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+async fn villages(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     tribalapi::update_api_data(false, ctx).await;
 
     let player_name = args.rest();
 
     let tw = {
         let data_read = ctx.data.read().await;
-        data_read.get::<TribalWarsState>().expect("Expected TribalWars in TypeMap.").clone()
+        data_read
+            .get::<TribalWarsState>()
+            .expect("Expected TribalWars in TypeMap.")
+            .clone()
     };
-
 
     let m = {
         let game = tw.write().await;
@@ -83,34 +74,34 @@ async fn villages(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult
 
         let vills = villages.unwrap();
 
-        msg
-        .channel_id
-        .send_message(&ctx, |m| {
-            m.content(format!("Villages for {}", player_name));
-            m.components(|c| c.add_action_row(PlayerInteract::action_row(vills)));
-            m
-        })
-        .await
-        .unwrap()
+        msg.channel_id
+            .send_message(&ctx, |m| {
+                m.content(format!("Villages for {}", player_name));
+                m.components(|c| c.add_action_row(PlayerInteract::action_row(vills)));
+                m
+            })
+            .await
+            .unwrap()
     };
 
-    let mci =
-        match m.await_component_interaction(&ctx).timeout(Duration::from_secs(60 * 3)).await {
-            Some(ci) => ci,
-            None => {
-                m.reply(&ctx, "Timed out").await.unwrap();
-                return Ok(());
-            },
-        };
+    let mci = match m
+        .await_component_interaction(&ctx)
+        .timeout(Duration::from_secs(60 * 3))
+        .await
+    {
+        Some(ci) => ci,
+        None => {
+            m.reply(&ctx, "Timed out").await.unwrap();
+            return Ok(());
+        }
+    };
 
     mci.create_interaction_response(&ctx, |r| {
         r.kind(InteractionResponseType::UpdateMessage);
-        r.interaction_response_data(|d| {
-            d
-        })
+        r.interaction_response_data(|d| d)
     })
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     let village_id = mci.data.values.get(0).unwrap().as_str();
     let village_coords: Vec<&str> = village_id.split(".").collect();

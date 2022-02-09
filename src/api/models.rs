@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::error::Error;
 
+use serde::Deserialize;
 use std::path::Path;
+use tracing::{debug, info};
 use urlencoding::decode;
-use serde::{Deserialize};
-use tracing::{info, debug};
 
 #[derive(Debug, Deserialize)]
 pub struct Village {
@@ -13,7 +13,7 @@ pub struct Village {
     pub x: u32,
     pub y: u32,
     pub player_id: u32,
-    pub rank: u32
+    pub rank: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,7 +23,7 @@ pub struct Player {
     pub tribe_id: u32,
     pub villages: u32,
     pub points: u32,
-    pub rank: u32
+    pub rank: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -35,46 +35,54 @@ pub struct Tribe {
     pub villages: u32,
     pub points: u32,
     pub all_points: u32,
-    pub rank: u32
+    pub rank: u32,
 }
 
 pub struct TribalWars {
     pub villages: HashMap<u32, Village>,
     pub players: HashMap<u32, Player>,
-    pub tribes: HashMap<u32, Tribe>
+    pub tribes: HashMap<u32, Tribe>,
 }
 
 impl TribalWars {
-    pub fn load() -> TribalWars  {
+    pub fn load() -> TribalWars {
         debug!("Loading TribalWars data");
 
         let mut tw = TribalWars {
             tribes: HashMap::new(),
             players: HashMap::new(),
-            villages: HashMap::new()
+            villages: HashMap::new(),
         };
 
         match tw.load_tribes() {
             Ok(_) => {}
-            Err(err) => { panic!("Could not load tribes! {:?}", err)}
+            Err(err) => {
+                panic!("Could not load tribes! {:?}", err)
+            }
         };
 
         match tw.load_players() {
             Ok(_) => {}
-            Err(err) => { panic!("Could not load players! {:?}", err)}
+            Err(err) => {
+                panic!("Could not load players! {:?}", err)
+            }
         };
 
         match tw.load_villages() {
             Ok(_) => {}
-            Err(err) => { panic!("Could not load villages! {:?}", err)}
+            Err(err) => {
+                panic!("Could not load villages! {:?}", err)
+            }
         };
 
         tw
     }
 
-    fn load_tribes(&mut self) -> Result<(), Box<dyn Error>>{
+    fn load_tribes(&mut self) -> Result<(), Box<dyn Error>> {
         debug!("Loading TribalWars tribes");
-        let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_path(Path::new("ally.txt"))?;
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(Path::new("ally.txt"))?;
         for result in rdr.deserialize() {
             let mut tribe: Tribe = result?;
             tribe.name = decode(tribe.name.replace("+", " ").as_str())?.into_owned();
@@ -86,9 +94,11 @@ impl TribalWars {
         Ok(())
     }
 
-    fn load_players(&mut self) -> Result<(), Box<dyn Error>>{
+    fn load_players(&mut self) -> Result<(), Box<dyn Error>> {
         debug!("Loading TribalWars players");
-        let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_path(Path::new("player.txt"))?;
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(Path::new("player.txt"))?;
         for result in rdr.deserialize() {
             let mut player: Player = result?;
             player.name = decode(player.name.replace("+", " ").as_str())?.into_owned();
@@ -100,9 +110,11 @@ impl TribalWars {
         Ok(())
     }
 
-    fn load_villages(&mut self) -> Result<(), Box<dyn Error>>{
+    fn load_villages(&mut self) -> Result<(), Box<dyn Error>> {
         debug!("Loading TribalWars villages");
-        let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_path(Path::new("village.txt"))?;
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_path(Path::new("village.txt"))?;
         for result in rdr.deserialize() {
             let mut village: Village = result?;
             village.name = decode(village.name.replace("+", " ").as_str())?.into_owned();
@@ -163,7 +175,12 @@ impl TribalWars {
 
         let tribe = tribe.unwrap();
 
-        let mut result = self.players.values().into_iter().filter(|v| v.tribe_id == tribe.id).collect();
+        let result = self
+            .players
+            .values()
+            .into_iter()
+            .filter(|v| v.tribe_id == tribe.id)
+            .collect();
 
         Some(result)
     }
@@ -197,7 +214,12 @@ impl TribalWars {
 
         let player = player.unwrap();
 
-        let mut result = self.villages.values().into_iter().filter(|v| v.player_id == player.id).collect();
+        let result = self
+            .villages
+            .values()
+            .into_iter()
+            .filter(|v| v.player_id == player.id)
+            .collect();
 
         Some(result)
     }

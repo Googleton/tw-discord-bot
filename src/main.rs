@@ -1,32 +1,37 @@
-mod commands;
 mod api;
+mod commands;
 
 use std::{collections::HashSet, env, sync::Arc};
-use std::collections::HashMap;
 
 use regex::Regex;
 
-use commands::{trib_interact::*};
-use commands::{tribal::*};
-use serenity::{async_trait, Client, client::bridge::gateway::{ShardManager}, framework::standard::{
-    macros::{group, hook},
-    StandardFramework,
-}, http::Http, model::{
-    channel::{Message},
-    gateway::Ready,
-}};
+use commands::trib_interact::*;
+use commands::tribal::*;
 use serenity::framework::standard::macros::help;
-use serenity::client::bridge::gateway::event::ShardStageUpdateEvent;
-use serenity::framework::standard::{Args, CommandGroup, CommandResult, help_commands, HelpOptions};
-use serenity::model::interactions::application_command::ApplicationCommand;
+use serenity::{
+    async_trait,
+    client::bridge::gateway::ShardManager,
+    framework::standard::{
+        macros::{group, hook},
+        StandardFramework,
+    },
+    http::Http,
+    model::{channel::Message, gateway::Ready},
+    Client,
+};
+
+use serenity::framework::standard::{
+    help_commands, Args, CommandGroup, CommandResult, HelpOptions,
+};
+
+use crate::api::models::TribalWars;
+use crate::api::reports::generate_report_image;
+use crate::api::tribalapi;
 use serenity::model::prelude::*;
 use serenity::prelude::{Context, EventHandler, TypeMapKey};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info};
-use crate::api::models::{TribalWars, Tribe};
-use crate::api::reports::generate_report_image;
-use crate::api::tribalapi;
-use crate::api::tribalapi::get_village_thumbnail;
+use crate::tribalapi::download_api_data;
 
 pub struct ShardManagerContainer;
 
@@ -77,7 +82,10 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    let appid: u64 = env::var("APPLICATION_ID").expect("Expected an application ID in the environment").parse().expect("Application ID invalid");
+    let appid: u64 = env::var("APPLICATION_ID")
+        .expect("Expected an application ID in the environment")
+        .parse()
+        .expect("Application ID invalid");
 
     let http = Http::new_with_token(&token);
 
@@ -86,17 +94,15 @@ async fn main() {
             let mut owners = HashSet::new();
             owners.insert(info.owner.id);
             (owners, info.id)
-        },
+        }
         Err(why) => panic!("Could not access application info: {:?}", why),
     };
 
-    let framework =
-        StandardFramework::new()
-            .configure(|c| c.owners(owners)
-                .prefix("_"))
-                .normal_message(normal_message)
-            .group(&GENERAL_GROUP)
-            .help(&MY_HELP);
+    let framework = StandardFramework::new()
+        .configure(|c| c.owners(owners).prefix("_"))
+        .normal_message(normal_message)
+        .group(&GENERAL_GROUP)
+        .help(&MY_HELP);
 
     let mut client = Client::builder(&token)
         .framework(framework)
@@ -105,6 +111,8 @@ async fn main() {
         .await
         .expect("Err creating client");
 
+    download_api_data(false).await;
+    
     {
         let tw = TribalWars::load();
         let mut data = client.data.write().await;
@@ -115,14 +123,15 @@ async fn main() {
     let shard_manager = client.shard_manager.clone();
 
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("Could not register ctrl+c handler");
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Could not register ctrl+c handler");
         shard_manager.lock().await.shutdown_all().await;
     });
 
     if let Err(why) = client.start().await {
         error!("Client error: {:?}", why);
     }
-
 }
 
 #[hook]
@@ -146,15 +155,17 @@ async fn normal_message(_ctx: &Context, msg: &Message) {
     for msg_part in msg_parts {
         if msg_part.contains("https://en125.tribalwars.net/public_report/") {
             match generate_report_image(msg_part) {
-                Ok(_) => {  }
-                Err(error) => { error!("Error generating report screenshot: {:?}", error); }
+                Ok(_) => {}
+                Err(error) => {
+                    error!("Error generating report screenshot: {:?}", error);
+                }
             };
-            
+
             info!("Sending report image");
-            
-            msg.channel_id.send_message(&_ctx.http, |m| {
-                m.add_file("report.png")
-            }).await;
+
+            msg.channel_id
+                .send_message(&_ctx.http, |m| m.add_file("report.png"))
+                .await;
         }
     }
 }

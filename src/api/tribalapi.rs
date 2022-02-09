@@ -1,33 +1,35 @@
+use csv::WriterBuilder;
+use serde::{Deserialize, Serialize};
+use serenity::prelude::Context;
 use std::error::Error;
-use std::fs::{File};
 use std::fs;
-use std::io::{Write};
+use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime};
-use csv::{WriterBuilder};
-use serde::{Serialize, Deserialize};
-use serenity::prelude::Context;
+use std::time::SystemTime;
 use tokio::sync::RwLock;
 
-use tracing::{info};
 use crate::api::models::TribalWars;
 use crate::TribalWarsState;
+use tracing::info;
 
 type Resultt<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Serialize, Deserialize)]
 struct LastUpdate {
-    when: SystemTime
+    when: SystemTime,
 }
 
 pub async fn update_api_data(bypass: bool, ctx: &Context) -> bool {
     let updated = download_api_data(bypass).await;
 
-    {
-        let tw = TribalWars::load();
-        let mut data = ctx.data.write().await;
-        data.insert::<TribalWarsState>(Arc::new(RwLock::new(tw)));
+    if updated {
+        {
+            let tw = TribalWars::load();
+            let mut data = ctx.data.write().await;
+            data.insert::<TribalWarsState>(Arc::new(RwLock::new(tw)));
+        }
     }
 
     return updated;
@@ -38,8 +40,12 @@ pub async fn download_api_data(bypass: bool) -> bool {
 
     info!("Checking update for TW API data");
     match check_last_update() {
-        Ok(res) => { should_update = res; }
-        Err(err) => { eprintln!("Couldn't read update file {:?}", err)}
+        Ok(res) => {
+            should_update = res;
+        }
+        Err(err) => {
+            eprintln!("Couldn't read update file {:?}", err)
+        }
     }
 
     if should_update || bypass {
@@ -49,7 +55,9 @@ pub async fn download_api_data(bypass: bool) -> bool {
         download_file("https://en125.tribalwars.net/map/player.txt").await;
         match write_last_update() {
             Ok(_) => {}
-            Err(err) => { eprintln!("Couldn't write update file {:?}", err)}
+            Err(err) => {
+                eprintln!("Couldn't write update file {:?}", err)
+            }
         }
 
         true
@@ -62,31 +70,35 @@ pub async fn download_api_data(bypass: bool) -> bool {
 async fn download_file(target: &str) -> Resultt<()> {
     let response = reqwest::get(target).await?;
     let fname = response
-            .url()
-            .path_segments()
-            .and_then(|segments| segments.last())
-            .and_then(|name| if name.is_empty() { None } else { Some(name) })
-            .unwrap_or("tmp.bin");
+        .url()
+        .path_segments()
+        .and_then(|segments| segments.last())
+        .and_then(|name| if name.is_empty() { None } else { Some(name) })
+        .unwrap_or("tmp.bin");
 
     let dest = File::create(fname);
-    let content =  response.text().await?;
+    let content = response.text().await?;
 
     match dest {
         Ok(mut file) => file.write(content.as_bytes()),
-        Err(e) => panic!("Uh oh, stinky. {:?}", e)
+        Err(e) => panic!("Uh oh, stinky. {:?}", e),
     };
 
     Ok(())
 }
 
 fn check_last_update() -> Result<bool, Box<dyn Error>> {
-    let mut rdr = csv::ReaderBuilder::new().has_headers(false).from_path(Path::new("update.csv"))?;
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_path(Path::new("update.csv"))?;
     for result in rdr.deserialize() {
         let update: LastUpdate = result?;
 
         match SystemTime::now().duration_since(update.when) {
-            Ok(n) => { return Ok(n.as_secs() > 3600); },
-            Err(_) => eprintln!("Couldn't read last update")
+            Ok(n) => {
+                return Ok(n.as_secs() > 3600);
+            }
+            Err(_) => eprintln!("Couldn't read last update"),
         }
     }
 
@@ -96,9 +108,11 @@ fn check_last_update() -> Result<bool, Box<dyn Error>> {
 fn write_last_update() -> Result<(), Box<dyn Error>> {
     fs::remove_file("update.csv")?;
 
-    let mut wtr = WriterBuilder::new().has_headers(false).from_path("update.csv")?;
+    let mut wtr = WriterBuilder::new()
+        .has_headers(false)
+        .from_path("update.csv")?;
     wtr.serialize(LastUpdate {
-        when: SystemTime::now()
+        when: SystemTime::now(),
     })?;
 
     Ok(())
@@ -112,6 +126,6 @@ pub fn get_village_thumbnail(village_points: u32, _barb: bool) -> &'static str {
         3000..=8999 => "https://dsen.innogamescdn.com/asset/6f4647d7/graphic///map_new/v4.png",
         9000..=10999 => "https://dsen.innogamescdn.com/asset/6f4647d7/graphic///map_new/v5.png",
         11000..=99999 => "https://dsen.innogamescdn.com/asset/6f4647d7/graphic///map_new/v6.png",
-        _ => "https://dsen.innogamescdn.com/asset/6f4647d7/graphic///map_new/v1.png"
+        _ => "https://dsen.innogamescdn.com/asset/6f4647d7/graphic///map_new/v1.png",
     }
 }
