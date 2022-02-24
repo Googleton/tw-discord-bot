@@ -11,7 +11,7 @@ use tokio::time::Duration;
 
 #[command]
 async fn update(ctx: &Context, msg: &Message) -> CommandResult {
-    let updated = api::tribalapi::download_api_data(false).await;
+    let updated = api::tribalapi::update_api_data(false, ctx).await;
 
     if updated {
         msg.channel_id
@@ -24,20 +24,15 @@ async fn update(ctx: &Context, msg: &Message) -> CommandResult {
                 "Last update was less than an hour ago, try later",
             )
             .await?;
-    }
-
-    {
-        let tw = TribalWars::load();
-        let mut data = ctx.data.write().await;
-        data.insert::<TribalWarsState>(Arc::new(RwLock::new(tw)));
     }
 
     Ok(())
 }
 
+// Duplicates function above  -> Maybe serenity has a handler for that stuff? Or I can extract the inside to another function
 #[command]
 async fn force_update(ctx: &Context, msg: &Message) -> CommandResult {
-    let updated = api::tribalapi::download_api_data(true).await;
+    let updated = api::tribalapi::update_api_data(true, ctx).await;
 
     if updated {
         msg.channel_id
@@ -50,12 +45,6 @@ async fn force_update(ctx: &Context, msg: &Message) -> CommandResult {
                 "Last update was less than an hour ago, try later",
             )
             .await?;
-    }
-
-    {
-        let tw = TribalWars::load();
-        let mut data = ctx.data.write().await;
-        data.insert::<TribalWarsState>(Arc::new(RwLock::new(tw)));
     }
 
     Ok(())
@@ -227,6 +216,10 @@ fn duration_to_tw_display(durr: &Duration) -> String {
     let seconds = durr.as_secs() - (hours * 3600) - (minutes * 60);
     format!("{}:{:02}:{:02}", hours, minutes, seconds)
 }
+
+// fn tw_display_to_duration(tw_disp: String) -> Duration {
+//     
+// }
 
 pub async fn send_village_embed(_ctx: &Context, msg: &Message, x: &u32, y: &u32) {
     let tw = {

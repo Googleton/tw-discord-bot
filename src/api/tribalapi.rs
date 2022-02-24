@@ -8,13 +8,13 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
+use serenity::model::gateway::{Activity, ActivityType};
+use serenity::model::prelude::OnlineStatus;
 use tokio::sync::RwLock;
 
 use crate::api::models::TribalWars;
-use crate::TribalWarsState;
-use tracing::info;
-
-type Resultt<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+use crate::{TribalWarsState};
+use tracing::{info, debug};
 
 #[derive(Serialize, Deserialize)]
 struct LastUpdate {
@@ -22,6 +22,7 @@ struct LastUpdate {
 }
 
 pub async fn update_api_data(bypass: bool, ctx: &Context) -> bool {
+    ctx.set_presence(Some(Activity::playing("updating TW data")), OnlineStatus::DoNotDisturb).await;
     let updated = download_api_data(bypass).await;
 
     if updated {
@@ -32,6 +33,7 @@ pub async fn update_api_data(bypass: bool, ctx: &Context) -> bool {
         }
     }
 
+    ctx.reset_presence().await;
     return updated;
 }
 
@@ -67,7 +69,8 @@ pub async fn download_api_data(bypass: bool) -> bool {
     }
 }
 
-async fn download_file(target: &str) -> Resultt<()> {
+async fn download_file(target: &str) -> Result<(), Box<dyn Error>> {
+    debug!("Downloading file {}", target);
     let response = reqwest::get(target).await?;
     let fname = response
         .url()

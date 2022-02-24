@@ -28,8 +28,8 @@ use crate::api::models::TribalWars;
 use crate::api::reports::generate_report_image;
 use crate::api::tribalapi;
 use serenity::model::prelude::*;
-use serenity::prelude::{Context, EventHandler, TypeMapKey};
-use tokio::sync::{Mutex, RwLock};
+use serenity::prelude::{Context, EventHandler, TypeMap, TypeMapKey};
+use tokio::sync::{Mutex, RwLock, RwLockWriteGuard};
 use tracing::{error, info};
 use crate::tribalapi::download_api_data;
 
@@ -61,6 +61,13 @@ impl EventHandler for Handler {
 #[group]
 #[commands(update, force_update, villages, tribe, tribe_members, travel, show_map)]
 struct General;
+
+#[group]
+#[prefixes("tribe", "t")]
+#[description = "Tribe related commands."]
+#[default_command(tribe)]
+#[commands(tribe_members)]
+struct Tribe;
 
 #[help]
 async fn my_help(
@@ -102,6 +109,7 @@ async fn main() {
         .configure(|c| c.owners(owners).prefix("_"))
         .normal_message(normal_message)
         .group(&GENERAL_GROUP)
+        .group(&TRIBE_GROUP)
         .help(&MY_HELP);
 
     let mut client = Client::builder(&token)
@@ -143,11 +151,10 @@ async fn normal_message(_ctx: &Context, msg: &Message) {
     // TODO: This can probably be improved
     let rgx = Regex::new(r"(\d{3})\|(\d{3})").unwrap();
     for capture in rgx.captures_iter(msg.content.as_str()) {
-        tribalapi::download_api_data(false).await;
+        tribalapi::update_api_data(false, _ctx).await;
         let x = &capture[1].parse::<u32>().unwrap();
         let y = &capture[2].parse::<u32>().unwrap();
         send_village_embed(_ctx, msg, x, y).await;
-        return;
     }
 
     // TODO: Probably move this to its own function to keep the code cleaner
